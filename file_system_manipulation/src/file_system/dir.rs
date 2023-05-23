@@ -1,5 +1,6 @@
 pub mod file;
 
+use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::Path;
@@ -9,12 +10,12 @@ use crate::file_system::{MatchResult, Queries};
 
 pub enum Node {
     File(File),
-    Dir(Dir),
+    Dir(RefCell<Dir>),
 }
 impl Display for Node{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self{
-            Node::Dir(dir) => write!(f, "{}", dir),
+            Node::Dir(dir) => write!(f, "{}", *dir.borrow()),
             Node::File(file) => write!(f, "{}", file)
         }
     }
@@ -22,7 +23,7 @@ impl Display for Node{
 impl PartialEq<Path> for Node {
     fn eq(&self, other: &Path) -> bool {
         match self {
-            Node::Dir(dir) => Path::new(&dir.name) == other,
+            Node::Dir(dir) => Path::new(&dir.borrow().name) == other,
             Node::File(file) => Path::new(file.get_name()) == other
         }
     }
@@ -36,12 +37,17 @@ impl<'b> Node{
                     result.nodes.push(self);
                 }
             },
-            Self::Dir(dir) => result = dir.search(queries, result)
+            Self::Dir(dir) => {
+                if let Some(q) = queries.iter().find(|q| q.matches(self)) {
+                    result.queries.push(q.to_str());
+                    result.nodes.push(self);
+                }
+                //result = dir.search(queries, result)
+            }
         }
         result
     }
 }
-
 
 #[derive(Default)]
 pub struct Dir {
@@ -79,7 +85,7 @@ impl<'b> Dir{
             let child = child?;
             let child_metadata = child.metadata()?;
             if child_metadata.is_dir() {
-                dir.children.push(Node::Dir(Dir::new(child.path().to_str().ok_or(CustomError::FileOrDirNameNotFound)?)?));
+                dir.children.push(Node::Dir(RefCell::new(Dir::new(child.path().to_str().ok_or(CustomError::FileOrDirNameNotFound)?)?)));
             } else if child_metadata.is_file() {
                 dir.children.push(Node::File(File::new( child.path().to_str().ok_or(CustomError::FileOrDirNameNotFound)?.to_string(), child_metadata)?));
             } else {
@@ -102,7 +108,7 @@ impl<'b> Dir{
             if self.children.iter().any(|child| child == path) {
                 return Err(CustomError::DirOrFileAlreadyExists);
             }
-            self.children.push( Node::Dir(Dir::new_from_dir(path, timestamp_to_u64(std::time::SystemTime::now())?)?));
+            self.children.push( Node::Dir(RefCell::new(Dir::new_from_dir(path, timestamp_to_u64(std::time::SystemTime::now())?)?)));
         }else{
             for child in self.children.iter_mut() {
                 match child {

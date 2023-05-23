@@ -1,5 +1,6 @@
 pub mod dir;
 
+use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::path::{PathBuf};
 use crate::file_system::dir::{Dir, Node};
@@ -12,7 +13,7 @@ pub struct MatchResult<'a> {
     nodes: Vec<&'a mut Node>
 }
 impl Display for MatchResult<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut result = String::from("Matched queries: ");
         for query in self.queries.iter() {
             result.push_str(query);
@@ -50,7 +51,7 @@ impl<'a> Queries<'a>{
     pub fn matches(&self, node: &Node) -> bool {
         match node {
             Node::File(file) => self.match_for_file(file),
-            Node::Dir(dir) => self.match_for_dir(dir),
+            Node::Dir(dir) => self.match_for_dir(&dir.borrow()),
         }
     }
     fn match_for_file(&self, file: &File) -> bool {
@@ -84,7 +85,6 @@ impl<'a> Queries<'a>{
         }
     }
 }
-
 
 pub struct FileSystem {
     root: Dir
